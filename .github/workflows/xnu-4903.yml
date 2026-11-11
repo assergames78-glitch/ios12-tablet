@@ -14,7 +14,7 @@ on:
         default: "DEVELOPMENT"
       runner:
         description: "macOS runner image"
-        default: "macos-14"
+        default: "macos-latest"
 
 jobs:
   build:
