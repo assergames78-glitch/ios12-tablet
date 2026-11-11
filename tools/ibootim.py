@@ -78,6 +78,12 @@ for k in range(w * h):
     rr, gg, bb = (rr * aa) // 255, (gg * aa) // 255, (bb * aa) // 255
     px.append(0xff000000 | (rr << 16) | (gg << 8) | bb)
 
+# The firmware logo is a dark-on-light mask (iBoot picks colours per device).
+# For the classic black-screen boot, invert when the background comes out light.
+if (px[0] & 0xff) > 128:
+    px = [0xff000000 | (0xffffff - (p & 0xffffff)) for p in px]
+    print('inverted to white-on-black')
+
 open(sys.argv[2], 'wb').write(struct.pack('<II', w, h) + struct.pack(f'<{len(px)}I', *px))
 print(f'{sys.argv[2]}: {w}x{h} ARGB')
 if len(sys.argv) > 3:

@@ -6,6 +6,7 @@ usage: ipsw_fetch.py <ipsw-url> list [substring]
        ipsw_fetch.py <ipsw-url> get <member-path> <out-file>
 """
 import io
+import subprocess
 import sys
 import urllib.request
 import zipfile
@@ -40,9 +41,11 @@ class HTTPRangeFile(io.RawIOBase):
         if n == 0 or self.pos >= self.size:
             return b''
         end = min(self.pos + n, self.size) - 1
-        req = urllib.request.Request(self.url, headers={**UA, 'Range': f'bytes={self.pos}-{end}'})
-        with urllib.request.urlopen(req) as r:
-            data = r.read()
+        # curl with retries: Apple's CDN occasionally drops TLS connections.
+        data = subprocess.run(
+            ['curl', '-fsSL', '--retry', '5', '--retry-all-errors', '-A', UA['User-Agent'],
+             '-r', f'{self.pos}-{end}', self.url],
+            capture_output=True, check=True).stdout
         self.pos += len(data)
         self.fetched += len(data)
         return data
