@@ -14,7 +14,7 @@ on:
         default: "DEVELOPMENT"
       runner:
         description: "macOS runner image"
-        default: "macos-latest"
+        default: "macos-15-intel"
 
 jobs:
   build:
@@ -23,14 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Host tools (dtrace CTF tools, AvailabilityVersions) don't change between
-      # runs; restore them so each build goes straight to the kernel.
-      - name: Cache host tools
-        uses: actions/cache@v4
+      # Restore the previous try's sources, host tools and compiled objects, so
+      # this try recompiles only what changed (minutes instead of ~25).
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
         with:
-          path: work/fakeroot/usr/local
-          key: hosttools-${{ inputs.runner }}-${{ hashFiles('scripts/build-xnu-4903.sh') }}
-          restore-keys: hosttools-${{ inputs.runner }}-
+          path: |
+            work
+            !work/build/xnu.dst
+            !work/build/xnu.sym
+            !work/build/dtrace.obj
+            !work/build/fh.obj
+            !work/xnu-staged
+          key: xnu-work-${{ inputs.runner }}-${{ inputs.machine_config }}-${{ github.run_id }}
+          restore-keys: xnu-work-${{ inputs.runner }}-${{ inputs.machine_config }}-
 
       - name: Build
         env:
@@ -38,6 +44,20 @@ jobs:
           MACHINE_CONFIG: ${{ inputs.machine_config }}
           KERNEL_CONFIG: ${{ inputs.kernel_config }}
         run: bash scripts/build-xnu-4903.sh
+
+      # Save even when the build failed: failed tries are the ones we resume from.
+      - name: Save build cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            work
+            !work/build/xnu.dst
+            !work/build/xnu.sym
+            !work/build/dtrace.obj
+            !work/build/fh.obj
+            !work/xnu-staged
+          key: xnu-work-${{ inputs.runner }}-${{ inputs.machine_config }}-${{ github.run_id }}
 
       - name: Upload logs
         if: always()

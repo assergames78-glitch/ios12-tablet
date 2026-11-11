@@ -45,11 +45,14 @@ sw_vers; xcodebuild -version; xcrun --sdk "$SDK" --show-sdk-path; xcrun --sdk "$
 for t in mig clang ld ctfconvert ctfmerge; do printf '%-12s %s\n' "$t" "$(xcrun --sdk "$SDK" -find $t 2>/dev/null || echo MISSING)"; done
 
 stage "sources"
-clone xnu "$XNU_TAG" "$WORK/xnu"
+# Pristine source stays untouched; patches are applied to a staged copy and
+# only *changed* files are synced into work/xnu, so a cached build directory
+# recompiles just what changed (incremental builds).
+clone xnu "$XNU_TAG" "$WORK/xnu-pristine"
 clone dtrace "" "$WORK/dtrace"
 clone AvailabilityVersions "" "$WORK/AvailabilityVersions"
 clone libdispatch "$LIBDISPATCH_TAG" "$WORK/libdispatch" || clone libdispatch "" "$WORK/libdispatch"
-( cd "$WORK/xnu" && git log -1 --oneline )
+( cd "$WORK/xnu-pristine" && git log -1 --oneline )
 
 stage "dtrace ctf tools"
 [ -n "$(find "$FAKEROOT" -name ctfmerge -type f 2>/dev/null | head -1)" ] && echo "cached" || \
@@ -69,7 +72,10 @@ AVAIL_PL="$(find "$FAKEROOT" -name availability.pl | head -1)"
 echo "availability.pl: ${AVAIL_PL:-NOT FOUND}"
 
 stage "patch xnu for a modern macOS host"
-cd "$WORK/xnu"
+rm -rf "$WORK/xnu-staged"
+cp -Rp "$WORK/xnu-pristine" "$WORK/xnu-staged"
+rm -rf "$WORK/xnu-staged/.git"
+cd "$WORK/xnu-staged"
 # 1. Apple's style checker (tools/uncrustify.sh) is not in the public source.
 sed -i '' -E 's/^(install:.*)[[:space:]]+checkstyle[[:space:]]*$/\1/' makedefs/MakeInc.top
 grep -n '^install:' makedefs/MakeInc.top
@@ -144,7 +150,22 @@ sed -i '' -E \
   -e "s|^INCFLAGS_SDK[[:space:]]*=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
   makedefs/MakeInc.def
 grep -n -E '^(LDFLAGS_KERNEL_SDK|INCFLAGS_SDK|SUPPORTED_ARM64_MACHINE_CONFIGS|USE_WERROR)' makedefs/MakeInc.def
-git status --short
+cd "$WORK"
+if [ ! -d "$WORK/xnu" ]; then
+  mv xnu-staged xnu
+  echo "fresh source tree (full build)"
+else
+  # Copy only files whose content changed, so make rebuilds just those.
+  n=0
+  while IFS= read -r f; do
+    if ! cmp -s "xnu-staged/$f" "xnu/$f"; then
+      mkdir -p "xnu/$(dirname "$f")"; cp "xnu-staged/$f" "xnu/$f"
+      echo "changed: $f"; n=$((n + 1))
+    fi
+  done < <(cd xnu-staged && find . -type f)
+  echo "$n source file(s) changed since the cached build"
+  rm -rf xnu-staged
+fi
 cd "$ROOT"
 
 # No EmbeddedDeviceMap outside Apple: a stub that answers "arm64", plus the
@@ -166,6 +187,9 @@ for d in "$FAKEROOT/usr/local/include/kernel/os" "$FAKEROOT/usr/local/include/os
 done
 ls "$FAKEROOT/usr/local/include/kernel/os" | head
 
+if [ -f "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" ]; then
+  stage "headers + libfirehose_kernel: cached"
+else
 stage "xnu kernel headers into fakeroot"
 ( cd "$WORK/xnu" && run xnu-headers make -k installhdrs "${COMMON_MAKE_ARGS[@]}" \
     ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" KERNEL_CONFIGS="$KERNEL_CONFIG" \
@@ -229,6 +253,7 @@ C
     xcrun libtool -static -o "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" "$WORK/firehose_stub.o" &&
     echo "stub library: $FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a"
 fi
+fi   # headers + firehose not cached
 
 stage "xnu kernel: $KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG"
 cd "$WORK/xnu"
@@ -237,7 +262,9 @@ if [ -n "${CTF_BIN:-}" ] && [ "$CTF_BIN" != "." ]; then
   CTF_ARGS=(CTFCONVERT="$CTF_BIN/ctfconvert" CTFMERGE="$CTF_BIN/ctfmerge" CTFINSERT="$CTF_BIN/ctfinsert")
 fi
 # -k: keep going past failures so one run reports every broken file at once.
-run xnu make -k -j"$(sysctl -n hw.ncpu)" install VERBOSE=YES \
+# BUILD_LTO=0: link-time optimisation re-compiles the whole kernel at link
+# time on every try; without it, an incremental try recompiles only changed files.
+run xnu make -k -j"$(sysctl -n hw.ncpu)" install VERBOSE=YES BUILD_LTO=0 \
   "${COMMON_MAKE_ARGS[@]}" \
   KERNEL_CONFIGS="$KERNEL_CONFIG" ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" \
   "${CTF_ARGS[@]}" \
