@@ -156,6 +156,13 @@ tail -4 osfmk/conf/files
 perl -0pi -e 's/(\x27IOProbeScore\x27    = 0:32;"\n\s*"   \}")/$1\n    "   ,{"\n    "     \x27IOClass\x27         = Ios12TabletPlatform;"\n    "     \x27IOProviderClass\x27 = IOPlatformExpertDevice;"\n    "     \x27IONameMatch\x27     = (\x27Pi3,1\x27, \x27MT6737T,1\x27);"\n    "     \x27IOProbeScore\x27    = 10000:32;"\n    "   }"/' \
   iokit/KernelConfigTables.cpp
 grep -n -A14 'gIOKernelConfigTables =' iokit/KernelConfigTables.cpp
+#    - Verbose-boot text: 32-bit console colours have alpha 0x00, which the
+#      MT6737's display overlay treats as fully transparent (text invisible).
+#      Make every 32-bit console colour opaque.
+grep -q 'ios12-tablet: opaque' osfmk/console/video_console.c ||
+  perl -0pi -e 's/(\n\tvinfo\.v_rows = vinfo\.v_height \/ ISO_CHAR_HEIGHT;)/\n\t\/* ios12-tablet: opaque 32-bit colours (alpha 0 is transparent on MTK) *\/\n\tfor (int ios12_i = 0; ios12_i < 8; ios12_i++) {\n\t\tvc_colors[ios12_i][2] |= 0xFF000000;\n\t}$1/' \
+  osfmk/console/video_console.c
+grep -n -B1 -A4 'ios12-tablet: opaque' osfmk/console/video_console.c
 #    - IOKit and workqueues use blocks, but the BCM2837 config (unlike
 #      MASTER.arm64) never enables the kernel's blocks runtime.
 perl -pi -e 's/^(#  LIBKERN_BASE =\s+\[ libkerncpp) (?!config_blocks)/$1 config_blocks /' config/MASTER.arm64.bcm2837
