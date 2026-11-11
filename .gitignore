@@ -1,3 +1,5 @@
 shim/out/
 *.img
 loader/out/
+qemu.log
+qemu-debug.log

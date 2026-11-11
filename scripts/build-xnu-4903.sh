@@ -213,6 +213,9 @@ echo "files with errors:"; cut -d: -f1 "$LOGS/all-errors.txt" | sort | uniq -c |
 echo "error kinds:"; sed -E 's/.*error: //' "$LOGS/all-errors.txt" | sed -E "s/'[^']*'/'X'/g" | sort | uniq -c | sort -rn | head -25
 echo "other failures:"; grep -h -E 'No rule to make|bad interpreter|command not found|\*\*\* \[' "$LOGS"/*.log | grep -v 'Waiting for' | sort -u | head -40 || true
 mkdir -p "$ROOT/out"
-find "$WORK/build/xnu.obj" -maxdepth 2 -name 'kernel*' -type f -exec cp {} "$ROOT/out/" \; 2>/dev/null
+find -L "$WORK/build/xnu.obj" "$WORK/build/xnu.dst" -maxdepth 4 -type f \
+  \( -name 'kernel.*' -o -name 'mach.*.unstripped' \) ! -name '*.dSYM' \
+  -exec cp {} "$ROOT/out/" \; 2>/dev/null
+[ -d "$WORK/build/xnu.sym" ] && find "$WORK/build/xnu.sym" -maxdepth 1 -name 'kernel*' -type f -exec cp {} "$ROOT/out/" \; 2>/dev/null
 ls -la "$ROOT/out"
 exit $XNU_RC
