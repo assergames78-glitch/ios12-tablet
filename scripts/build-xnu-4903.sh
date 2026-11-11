@@ -66,12 +66,62 @@ stage "AvailabilityVersions"
 AVAIL_PL="$(find "$FAKEROOT" -name availability.pl | head -1)"
 echo "availability.pl: ${AVAIL_PL:-NOT FOUND}"
 
+stage "patch xnu for a modern macOS host"
+cd "$WORK/xnu"
+# 1. Apple's style checker (tools/uncrustify.sh) is not in the public source.
+sed -i '' 's/^\(install:.*\) checkstyle$/\1/' makedefs/MakeInc.top
+grep -n '^install:' makedefs/MakeInc.top
+# 2. macOS no longer ships /usr/bin/python (Python 2). Rewrite the one
+#    generator the kernel build needs, and point any other scripts at python3.
+cat > bsd/kern/makekdebugevents.py <<'PY'
+#!/usr/bin/env python3
+# Python 3 port of xnu's makekdebugevents.py: trace.codes -> kd_events[] table.
+import re, sys
+if len(sys.argv) < 2:
+    sys.exit(1)
+pat = re.compile(r'0x([0-9a-fA-F]+)\s+([^\s]*)')
+table = []
+with open(sys.argv[1], 'rt', errors='replace') as codes:
+    for line in codes:
+        m = pat.match(line)
+        if m:
+            table.append((int(m.group(1), 16), m.group(2)))
+print("typedef struct {")
+print("        uint32_t   id;")
+print("        const char *name;")
+print("} kd_event_t;")
+print("kd_event_t kd_events[] = {")
+for code, name in sorted(table, key=lambda x: x[0]):
+    print('        {0x%x, "%s"},' % (code, name))
+print("};")
+PY
+chmod +x bsd/kern/makekdebugevents.py
+grep -rl --include='*.py' '^#!/usr/bin/python' . | while read -r f; do
+  echo "python shebang -> python3: $f"; sed -i '' '1s|^#!/usr/bin/python.*|#!/usr/bin/env python3|' "$f"
+done
+# 3. Use our fakeroot for availability.pl, firehose and kernel headers.
+[ -n "${AVAIL_PL:-}" ] && sed -i '' "s|^AVAILABILITY_PL=.*|AVAILABILITY_PL=\"$AVAIL_PL\"|" bsd/sys/make_symbol_aliasing.sh
+sed -i '' \
+  -e "s|^LDFLAGS_KERNEL_SDK *=.*|LDFLAGS_KERNEL_SDK = -L$FAKEROOT/usr/local/lib/kernel|" \
+  -e "s|^INCFLAGS_SDK *=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
+  makedefs/MakeInc.def
+grep -n -E '^(LDFLAGS_KERNEL_SDK|INCFLAGS_SDK|SUPPORTED_ARM64_MACHINE_CONFIGS|USE_WERROR)' makedefs/MakeInc.def
+git status --short
+cd "$ROOT"
+
+# No EmbeddedDeviceMap outside Apple: tell make the arch string directly.
+COMMON_MAKE_ARGS=(SDKROOT="$SDK" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 USE_WERROR=0)
+
 stage "xnu kernel headers into fakeroot"
-( cd "$WORK/xnu" && run xnu-headers make installhdrs SDKROOT="$SDK" ARCH_CONFIGS="$ARCH_CONFIG" \
-    SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/hdrs.obj" SYMROOT="$WORK/build/hdrs.sym" DSTROOT="$FAKEROOT" \
-    USE_WERROR=0 )
+( cd "$WORK/xnu" && run xnu-headers make installhdrs "${COMMON_MAKE_ARGS[@]}" \
+    ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" KERNEL_CONFIGS="$KERNEL_CONFIG" \
+    SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/hdrs.obj" SYMROOT="$WORK/build/hdrs.sym" DSTROOT="$FAKEROOT" )
 
 stage "libfirehose_kernel ($LIBDISPATCH_TAG)"
+# Drop includes of Apple-internal xcconfigs that only exist inside Apple.
+for f in "$WORK"/libdispatch/xcodeconfig/*.xcconfig; do
+  sed -i '' -E '/#include.*(BSD\.xcconfig|AppleInternal)/d' "$f"
+done
 FH_CFG="$WORK/libdispatch/xcodeconfig/libfirehose_kernel.xcconfig"
 if [ -f "$FH_CFG" ]; then
   sed -i '' \
@@ -88,26 +138,15 @@ if [ -n "$FH_LIB" ]; then
 fi
 echo "firehose lib: ${FH_LIB:-NOT BUILT}"
 
-stage "patch xnu makefiles to use the fakeroot"
-cd "$WORK/xnu"
-[ -n "${AVAIL_PL:-}" ] && sed -i '' "s|^AVAILABILITY_PL=.*|AVAILABILITY_PL=\"$AVAIL_PL\"|" bsd/sys/make_symbol_aliasing.sh
-sed -i '' \
-  -e "s|^LDFLAGS_KERNEL_SDK *=.*|LDFLAGS_KERNEL_SDK = -L$FAKEROOT/usr/local/lib/kernel|" \
-  -e "s|^INCFLAGS_SDK *=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
-  makedefs/MakeInc.def
-grep -n -E '^(LDFLAGS_KERNEL_SDK|INCFLAGS_SDK|SUPPORTED_ARM64_MACHINE_CONFIGS|USE_WERROR)' makedefs/MakeInc.def
-git diff --stat
-
 stage "xnu kernel: $KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG"
+cd "$WORK/xnu"
 CTF_ARGS=()
 if [ -n "${CTF_BIN:-}" ] && [ "$CTF_BIN" != "." ]; then
   CTF_ARGS=(CTFCONVERT="$CTF_BIN/ctfconvert" CTFMERGE="$CTF_BIN/ctfmerge" CTFINSERT="$CTF_BIN/ctfinsert")
 fi
 run xnu make -j"$(sysctl -n hw.ncpu)" install VERBOSE=YES \
-  SDKROOT="$SDK" \
+  "${COMMON_MAKE_ARGS[@]}" \
   KERNEL_CONFIGS="$KERNEL_CONFIG" ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" \
-  ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 \
-  USE_WERROR=0 \
   "${CTF_ARGS[@]}" \
   SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/xnu.obj" SYMROOT="$WORK/build/xnu.sym" DSTROOT="$WORK/build/xnu.dst"
 XNU_RC=$?
