@@ -76,6 +76,22 @@ PC). Our loader shows it the way an iPhone's bootloader does, then starts the
 core of iOS behind it. Seen on the tablet's screen. (How far iOS gets behind
 the logo on the tablet isn't visible yet.)
 
+### Where it stopped (11 November 2026)
+
+The project is stopped here, on purpose, ending on the Apple logo. What works:
+
+- Our own boot code runs on the tablet (fastboot boot, nothing flashed).
+- The real iPhone 5s Apple logo shows on the tablet, and the iOS 12 kernel
+  starts behind it.
+- In QEMU's pretend Raspberry Pi the kernel boots through memory, scheduler,
+  IOKit (with our own platform driver, random-number backend and CPU count)
+  and into BSD init.
+
+If anyone picks it up again, the next pieces were: verbose boot text on the
+tablet (opaque console colours were written but never tested), finishing BSD
+init in QEMU (pthread built in, try 19), then a root disk (HFS+), launchd, and
+eventually SpringBoard. The rest of this file is the old plan.
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.
