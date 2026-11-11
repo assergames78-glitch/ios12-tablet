@@ -71,7 +71,7 @@ echo "availability.pl: ${AVAIL_PL:-NOT FOUND}"
 stage "patch xnu for a modern macOS host"
 cd "$WORK/xnu"
 # 1. Apple's style checker (tools/uncrustify.sh) is not in the public source.
-sed -i '' 's/^\(install:.*\) checkstyle$/\1/' makedefs/MakeInc.top
+sed -i '' -E 's/^(install:.*)[[:space:]]+checkstyle[[:space:]]*$/\1/' makedefs/MakeInc.top
 grep -n '^install:' makedefs/MakeInc.top
 # 2. macOS no longer ships /usr/bin/python (Python 2). Rewrite the one
 #    generator the kernel build needs, and point any other scripts at python3.
@@ -102,7 +102,28 @@ grep -rl --include='*.py' '^#!/usr/bin/python' . | while read -r f; do
   echo "python shebang -> python3: $f"; sed -i '' '1s|^#!/usr/bin/python.*|#!/usr/bin/env python3|' "$f"
 done
 # 3. Use our fakeroot for availability.pl, firehose and kernel headers.
-[ -n "${AVAIL_PL:-}" ] && sed -i '' "s|^AVAILABILITY_PL=.*|AVAILABILITY_PL=\"$AVAIL_PL\"|" bsd/sys/make_symbol_aliasing.sh
+if [ -n "${AVAIL_PL:-}" ]; then
+  grep -rl 'libexec/availability.pl' bsd/sys/*.sh | while read -r f; do
+    sed -i '' -E "s|[^\"' ]*/usr/local/libexec/availability\.pl|$AVAIL_PL|g" "$f"
+    echo "availability.pl path patched: $f"; grep -n 'availability.pl' "$f"
+  done
+fi
+# 4. BCM2837 bring-up config gaps:
+#    - kpc (Apple's CPU performance counters) uses Apple-only registers and the
+#      config never defines CORE_NCTRS for this board: turn kpc off.
+sed -i '' -E 's/^(#  PERF_DBG_BASE =.*) kpc ]/\1 ]/' config/MASTER.arm64.bcm2837
+grep -n 'PERF_DBG_BASE =' config/MASTER.arm64.bcm2837
+#    - machine/monotonic.h uses MT_CORE_NFIXED even when MONOTONIC is off.
+cat >> osfmk/arm64/monotonic.h <<'H'
+
+/* ios12-tablet: fallbacks for configs built without MONOTONIC (e.g. BCM2837). */
+#ifndef MT_CORE_NFIXED
+#define MT_CORE_CYCLES 0
+#define MT_CORE_INSTRS 1
+#define MT_CORE_NFIXED 2
+#define MT_CORE_MAXVAL ((UINT64_C(1) << 48) - 1)
+#endif
+H
 sed -i '' \
   -e "s|^LDFLAGS_KERNEL_SDK *=.*|LDFLAGS_KERNEL_SDK = -L$FAKEROOT/usr/local/lib/kernel|" \
   -e "s|^INCFLAGS_SDK *=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
@@ -111,11 +132,22 @@ grep -n -E '^(LDFLAGS_KERNEL_SDK|INCFLAGS_SDK|SUPPORTED_ARM64_MACHINE_CONFIGS|US
 git status --short
 cd "$ROOT"
 
-# No EmbeddedDeviceMap outside Apple: tell make the arch string directly.
-COMMON_MAKE_ARGS=(SDKROOT="$SDK" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 USE_WERROR=0)
+# No EmbeddedDeviceMap outside Apple: a stub that answers "arm64", plus the
+# arch string passed directly.
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\necho arm64\n' > "$WORK/bin/embedded_device_map"
+chmod +x "$WORK/bin/embedded_device_map"
+COMMON_MAKE_ARGS=(SDKROOT="$SDK" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 USE_WERROR=0
+  EMBEDDED_DEVICE_MAP="$WORK/bin/embedded_device_map" EDM_DBPATH=/dev/null)
+
+# xnu's os_log code includes firehose headers that ship with libdispatch.
+for d in "$FAKEROOT/usr/local/include/kernel/os" "$FAKEROOT/usr/local/include/os"; do
+  mkdir -p "$d"; cp "$WORK"/libdispatch/os/*.h "$d"/ 2>/dev/null
+done
+ls "$FAKEROOT/usr/local/include/kernel/os" | head
 
 stage "xnu kernel headers into fakeroot"
-( cd "$WORK/xnu" && run xnu-headers make installhdrs "${COMMON_MAKE_ARGS[@]}" \
+( cd "$WORK/xnu" && run xnu-headers make -k installhdrs "${COMMON_MAKE_ARGS[@]}" \
     ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" KERNEL_CONFIGS="$KERNEL_CONFIG" \
     SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/hdrs.obj" SYMROOT="$WORK/build/hdrs.sym" DSTROOT="$FAKEROOT" )
 
