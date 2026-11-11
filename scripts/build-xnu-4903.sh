@@ -148,7 +148,12 @@ mkdir -p "$WORK/bin"
 printf '#!/bin/sh\necho arm64\n' > "$WORK/bin/embedded_device_map"
 chmod +x "$WORK/bin/embedded_device_map"
 COMMON_MAKE_ARGS=(SDKROOT="$SDK" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 USE_WERROR=0
-  EMBEDDED_DEVICE_MAP="$WORK/bin/embedded_device_map" EDM_DBPATH=/dev/null)
+  EMBEDDED_DEVICE_MAP="$WORK/bin/embedded_device_map" EDM_DBPATH=/dev/null
+  # Target the A7 / iOS 12 instruction set (ARMv8.0). Left alone, today's
+  # Xcode targets the SDK's iOS version and emits ARMv8.1 atomics (casal,
+  # ldadd...) that Cortex-A53 doesn't have -> undefined instruction at boot.
+  DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=12.0"
+  ARCH_FLAGS_ARM64="-arch arm64 -mcpu=apple-a7")
 
 # xnu's os_log code includes firehose headers that ship with libdispatch.
 for d in "$FAKEROOT/usr/local/include/kernel/os" "$FAKEROOT/usr/local/include/os"; do
