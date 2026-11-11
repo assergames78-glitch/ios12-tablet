@@ -104,15 +104,21 @@ done
 # 3. Use our fakeroot for availability.pl, firehose and kernel headers.
 if [ -n "${AVAIL_PL:-}" ]; then
   grep -rl 'libexec/availability.pl' bsd/sys/*.sh | while read -r f; do
-    sed -i '' -E "s|[^\"' ]*/usr/local/libexec/availability\.pl|$AVAIL_PL|g" "$f"
+    AVAIL_PL="$AVAIL_PL" perl -pi -e 's/\$\{SDKROOT\}\/usr\/local\/libexec\/availability\.pl/$ENV{AVAIL_PL}/g' "$f"
     echo "availability.pl path patched: $f"; grep -n 'availability.pl' "$f"
   done
 fi
 # 4. BCM2837 bring-up config gaps:
-#    - kpc (Apple's CPU performance counters) uses Apple-only registers and the
-#      config never defines CORE_NCTRS for this board: turn kpc off.
-sed -i '' -E 's/^(#  PERF_DBG_BASE =.*) kpc ]/\1 ]/' config/MASTER.arm64.bcm2837
-grep -n 'PERF_DBG_BASE =' config/MASTER.arm64.bcm2837
+#    - task.c always touches kpc state, so kpc must stay on; the board config
+#      just never says how many PMU counters there are. (A53 has 6 + cycle.)
+perl -pi -e 's/^(#define ARM_BOARD_CLASS_BCM2837)\s*$/$1\n#define CORE_NCTRS 8 \/* ios12-tablet *\/\n/' \
+  pexpert/pexpert/arm64/board_config.h
+grep -n -A2 'ARM_BOARD_CLASS_BCM2837' pexpert/pexpert/arm64/board_config.h
+#    - assym.s: replace the sed that modern clang output breaks (see script).
+cp "$ROOT/scripts/genassym_to_assym.py" tools/genassym_to_assym.py
+perl -0pi -e 's/(assym\.s: genassym\.o\n)\t\$\(_v\)sed [^\n]*\n/$1\t\$(_v)python3 \$(SRCROOT)\/tools\/genassym_to_assym.py genassym.o > \$@\n/' \
+  osfmk/conf/Makefile.template
+grep -n -A1 '^assym.s:' osfmk/conf/Makefile.template
 #    - machine/monotonic.h uses MT_CORE_NFIXED even when MONOTONIC is off.
 cat >> osfmk/arm64/monotonic.h <<'H'
 
@@ -124,9 +130,9 @@ cat >> osfmk/arm64/monotonic.h <<'H'
 #define MT_CORE_MAXVAL ((UINT64_C(1) << 48) - 1)
 #endif
 H
-sed -i '' \
-  -e "s|^LDFLAGS_KERNEL_SDK *=.*|LDFLAGS_KERNEL_SDK = -L$FAKEROOT/usr/local/lib/kernel|" \
-  -e "s|^INCFLAGS_SDK *=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
+sed -i '' -E \
+  -e "s|^LDFLAGS_KERNEL_SDK[[:space:]]*=.*|LDFLAGS_KERNEL_SDK = -L$FAKEROOT/usr/local/lib/kernel|" \
+  -e "s|^INCFLAGS_SDK[[:space:]]*=.*|INCFLAGS_SDK = -I$FAKEROOT/usr/local/include/kernel -I\$(SDKROOT)/usr/local/include/kernel|" \
   makedefs/MakeInc.def
 grep -n -E '^(LDFLAGS_KERNEL_SDK|INCFLAGS_SDK|SUPPORTED_ARM64_MACHINE_CONFIGS|USE_WERROR)' makedefs/MakeInc.def
 git status --short
