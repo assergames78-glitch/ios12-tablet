@@ -182,8 +182,16 @@ COMMON_MAKE_ARGS=(SDKROOT="$SDK" ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 US
   ARCH_FLAGS_ARM64="-arch arm64 -mcpu=apple-a7")
 
 # xnu's os_log code includes firehose headers that ship with libdispatch.
+# Install them the way libdispatch's Xcode project does: through unifdef with
+# the kernel switches, or the KERNEL-only definitions stay switched off.
 for d in "$FAKEROOT/usr/local/include/kernel/os" "$FAKEROOT/usr/local/include/os"; do
-  mkdir -p "$d"; cp "$WORK"/libdispatch/os/*.h "$d"/ 2>/dev/null
+  mkdir -p "$d"
+  for h in "$WORK"/libdispatch/os/*.h; do
+    xcrun unifdef -DKERNEL=1 -DOS_FIREHOSE_SPI=1 -DOS_VOUCHER_ACTIVITY_SPI_TYPES=1 \
+      -UOS_VOUCHER_ACTIVITY_SPI "$h" > "$d/.tmp.h"
+    cmp -s "$d/.tmp.h" "$d/$(basename "$h")" || mv "$d/.tmp.h" "$d/$(basename "$h")"
+    rm -f "$d/.tmp.h"
+  done
 done
 ls "$FAKEROOT/usr/local/include/kernel/os" | head
 
