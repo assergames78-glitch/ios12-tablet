@@ -65,6 +65,17 @@ memory, and started its scheduler and messaging systems. Then it stopped on
 purpose: *"Unable to find driver for this platform"*. Real iPhones ship a
 closed-source driver for each model; we wrote our own small one (try 13).
 
+**Evening: more stops passed in the pretend Raspberry Pi.** With our own
+platform driver, random-number plug-in and CPU count, iOS's core now gets
+through IOKit and into its Unix layer (network buffers set up), then needs
+Apple's open-source thread support, which try 19 builds in.
+
+**Night: STEP: the Apple logo on the tablet.** The real iPhone 5s boot logo,
+taken from Apple's own iOS 12.5.8 firmware (67 KB downloaded, kept only on the
+PC). Our loader shows it the way an iPhone's bootloader does, then starts the
+core of iOS behind it. Seen on the tablet's screen. (How far iOS gets behind
+the logo on the tablet isn't visible yet.)
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.
