@@ -27,11 +27,16 @@ ios12_heartbeat(void *arg __unused)
 		uint64_t now = mach_absolute_time();
 		IOLog("ios12-tablet: heartbeat %u (mach_absolute_time %llu, timebase %u Hz)\n",
 		    n, now, (unsigned)gPEClockFrequencyInfo.timebase_frequency_hz);
+		if (n == 10) {
+			ios12_dump_threads();
+		}
 	}
 }
 
 /* osfmk/prng/ios12_prng.c: stands in for the corecrypto kext's PRNG. */
 extern "C" void ios12_prng_register(void);
+/* osfmk/kern/ios12_debug.c: prints all threads and where they block. */
+extern "C" void ios12_dump_threads(void);
 
 class Ios12TabletPlatform : public IODTPlatformExpert
 {
