@@ -11,6 +11,9 @@
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IOLib.h>
 
+/* osfmk/prng/ios12_prng.c: stands in for the corecrypto kext's PRNG. */
+extern "C" void ios12_prng_register(void);
+
 class Ios12TabletPlatform : public IODTPlatformExpert
 {
 	OSDeclareDefaultStructors(Ios12TabletPlatform);
@@ -42,6 +45,11 @@ Ios12TabletPlatform::start(IOService * provider)
 {
 	IOLog("ios12-tablet: platform driver starting for \"%s\"\n",
 	    provider ? provider->getName() : "?");
+
+	/* IOPlatformExpert::start -> IOPMrootDomain::start -> uuid_generate
+	 * needs read_random(), which needs a registered PRNG backend. */
+	ios12_prng_register();
+	IOLog("ios12-tablet: kernel random number generator registered\n");
 
 	if (!super::start(provider)) {
 		IOLog("ios12-tablet: IODTPlatformExpert::start failed\n");

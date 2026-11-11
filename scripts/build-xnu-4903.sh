@@ -131,6 +131,8 @@ grep -n -A1 'ios12-tablet' pexpert/arm/pe_identify_machine.c
 cp -R "$ROOT/xnu-additions/." .
 grep -q 'Ios12TabletPlatform.cpp' iokit/conf/files ||
   printf '\niokit/Kernel/Ios12TabletPlatform.cpp\t\t\toptional iokitcpp\n' >> iokit/conf/files
+grep -q 'ios12_prng.c' osfmk/conf/files ||
+  printf '\nosfmk/prng/ios12_prng.c\t\tstandard\n' >> osfmk/conf/files
 perl -0pi -e 's/(\x27IOProbeScore\x27    = 0:32;"\n\s*"   \}")/$1\n    "   ,{"\n    "     \x27IOClass\x27         = Ios12TabletPlatform;"\n    "     \x27IOProviderClass\x27 = IOPlatformExpertDevice;"\n    "     \x27IONameMatch\x27     = (\x27Pi3,1\x27, \x27MT6737T,1\x27);"\n    "     \x27IOProbeScore\x27    = 10000:32;"\n    "   }"/' \
   iokit/KernelConfigTables.cpp
 grep -n -A14 'gIOKernelConfigTables =' iokit/KernelConfigTables.cpp
