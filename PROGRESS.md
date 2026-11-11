@@ -46,6 +46,15 @@ last step, missing only 6 names from a small Apple feature called "blocks".
 Apple's Raspberry Pi settings (our starting point) simply forgot to switch that
 feature on, unlike the iPhone settings. Attempt 9 switches it on.
 
+**Evening: 🎉 the core of iOS 12 built (attempt 9)!** An 11.5 MB kernel file.
+
+**Evening: first start in the pretend Raspberry Pi.** The loader handed over,
+and iOS's core started running its own code and switched on its own memory
+system. Then it crashed before printing anything. Reason: today's Apple tools
+built it for *new* iPhone chips, using about 3,900 instructions that older chips
+(like the tablet's and the Raspberry Pi's) don't have. Attempt 10 builds it for
+the iPhone 5s's chip instead, which speaks the same language as the tablet's.
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.

@@ -114,6 +114,11 @@ fi
 perl -pi -e 's/^(#define ARM_BOARD_CLASS_BCM2837)\s*$/$1\n#define CORE_NCTRS 8 \/* ios12-tablet *\/\n/' \
   pexpert/pexpert/arm64/board_config.h
 grep -n -A2 'ARM_BOARD_CLASS_BCM2837' pexpert/pexpert/arm64/board_config.h
+#    - "bcm2837-io" hard-codes a 1 MHz timebase. Read the real generic-timer
+#      rate (set by firmware: QEMU 19.2 MHz, MT6737 LK/ATF 13 MHz) instead.
+perl -pi -e 's/^(\s*)tclk = 1000000;/$1tclk = (uint32_t)__builtin_arm_rsr64("CNTFRQ_EL0"); \/* ios12-tablet *\/\n$1if (tclk == 0) { tclk = 1000000; }/' \
+  pexpert/arm/pe_identify_machine.c
+grep -n -A1 'ios12-tablet' pexpert/arm/pe_identify_machine.c
 #    - IOKit and workqueues use blocks, but the BCM2837 config (unlike
 #      MASTER.arm64) never enables the kernel's blocks runtime.
 perl -pi -e 's/^(#  LIBKERN_BASE =\s+\[ libkerncpp) (?!config_blocks)/$1 config_blocks /' config/MASTER.arm64.bcm2837
