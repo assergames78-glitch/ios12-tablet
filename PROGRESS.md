@@ -34,6 +34,13 @@ startup (how much memory there is, what hardware is present), and hands over.
 Tested on a pretend Raspberry Pi running on the PC (QEMU) with a stand-in
 "kernel": the hand-over works.
 
+**Evening: attempt 7.** Got past the missing file, then hit the next one: the
+logging library needs a piece from another Apple package. Attempt 8 adds that
+package, plus a safety net: if the logging library *still* won't build, a
+do-nothing stand-in is used so the core can finish building anyway. (The core
+copes fine without it: it just skips saving some log messages. Its on-screen
+startup text doesn't depend on it.)
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.
