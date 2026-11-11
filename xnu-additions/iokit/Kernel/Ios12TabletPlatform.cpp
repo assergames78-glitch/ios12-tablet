@@ -10,6 +10,25 @@
  */
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IOLib.h>
+#include <pexpert/pexpert.h>
+#include <mach/mach_time.h>
+
+/*
+ * Boot diagnostics: a thread that prints a heartbeat every 2 seconds. If the
+ * heartbeats stop (or never start), the kernel's timer isn't firing; if they
+ * keep coming while boot is stuck, the kernel is waiting for something else.
+ * Enabled with the boot-arg "ios12hb=1".
+ */
+static void
+ios12_heartbeat(void *arg __unused)
+{
+	for (unsigned n = 1;; n++) {
+		IOSleep(2000);
+		uint64_t now = mach_absolute_time();
+		IOLog("ios12-tablet: heartbeat %u (mach_absolute_time %llu, timebase %u Hz)\n",
+		    n, now, (unsigned)gPEClockFrequencyInfo.timebase_frequency_hz);
+	}
+}
 
 /* osfmk/prng/ios12_prng.c: stands in for the corecrypto kext's PRNG. */
 extern "C" void ios12_prng_register(void);
@@ -58,5 +77,12 @@ Ios12TabletPlatform::start(IOService * provider)
 
 	registerService();
 	IOLog("ios12-tablet: platform driver registered\n");
+
+	uint32_t hb = 0;
+	if (PE_parse_boot_argn("ios12hb", &hb, sizeof(hb)) && hb) {
+		if (IOCreateThread(ios12_heartbeat, NULL) != NULL) {
+			IOLog("ios12-tablet: heartbeat thread started\n");
+		}
+	}
 	return true;
 }

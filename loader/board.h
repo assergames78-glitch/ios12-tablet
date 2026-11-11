@@ -10,7 +10,7 @@ static inline uint32_t mmio_r32(uint64_t a) { return *(volatile uint32_t *)a; }
 #define BOARD_NAME      "qemu raspi3b"
 #define BOARD_PHYS_BASE 0x04000000ULL                 /* above the loader image */
 #define BOARD_MEM_SIZE  (0x3C000000ULL - BOARD_PHYS_BASE)
-#define BOARD_BOOT_ARGS "-pi3 serial=3 debug=0x8 -v cpus=1"
+#define BOARD_BOOT_ARGS "-pi3 serial=3 debug=0x8 -v cpus=1 ios12hb=1"
 
 #define AUX_ENABLES   0x3F215004
 #define AUX_MU_IO     0x3F215040
