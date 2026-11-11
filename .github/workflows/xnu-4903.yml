@@ -1,0 +1,46 @@
+name: xnu-4903 (iOS 12 kernel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      xnu_tag:
+        description: "xnu tag"
+        default: "xnu-4903.270.47"
+      machine_config:
+        description: "MACHINE_CONFIG (BCM2837 = Cortex-A53, S5L8960X = A7)"
+        default: "BCM2837"
+      kernel_config:
+        description: "KERNEL_CONFIG"
+        default: "DEVELOPMENT"
+      runner:
+        description: "macOS runner image"
+        default: "macos-14"
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        env:
+          XNU_TAG: ${{ inputs.xnu_tag }}
+          MACHINE_CONFIG: ${{ inputs.machine_config }}
+          KERNEL_CONFIG: ${{ inputs.kernel_config }}
+        run: bash scripts/build-xnu-4903.sh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ inputs.machine_config }}-${{ inputs.kernel_config }}
+          path: logs/
+
+      - name: Upload kernel
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ inputs.machine_config }}-${{ inputs.kernel_config }}
+          path: out/
+          if-no-files-found: ignore
