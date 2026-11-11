@@ -158,6 +158,13 @@ stage "xnu kernel headers into fakeroot"
     SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/hdrs.obj" SYMROOT="$WORK/build/hdrs.sym" DSTROOT="$FAKEROOT" )
 
 stage "libfirehose_kernel ($LIBDISPATCH_TAG)"
+# firehose_buffer.c includes <internal/atomic.h> (os/internal/atomic.h), a
+# libplatform private header. Install libplatform's headers into the fakeroot.
+clone libplatform "${LIBPLATFORM_TAG:-libplatform-177.270.1}" "$WORK/libplatform" || clone libplatform "" "$WORK/libplatform"
+for d in include private; do
+  [ -d "$WORK/libplatform/$d" ] && (cd "$WORK/libplatform/$d" && find . -name '*.h' | cpio -pdm "$FAKEROOT/usr/local/include" 2>/dev/null)
+done
+ls "$FAKEROOT/usr/local/include/os/internal" 2>/dev/null | head
 # xnu's installed kernel headers include <Availability.h> and friends, which a
 # real SDK's Kernel.framework provides but installhdrs does not. Borrow them
 # from the iOS SDK.
@@ -190,6 +197,24 @@ if [ -n "$FH_LIB" ]; then
   cp "$FH_LIB" "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a"
 fi
 echo "firehose lib: ${FH_LIB:-NOT BUILT}"
+if [ -z "$FH_LIB" ]; then
+  # Fallback: a do-nothing libfirehose_kernel so the kernel still links.
+  # xnu copes: a NULL tracepoint just drops that os_log message; printf and
+  # the serial/screen console don't go through firehose at all.
+  echo "!!! using STUB libfirehose_kernel (os_log messages will be dropped)"
+  cat > "$WORK/firehose_stub.c" <<'C'
+#include <stddef.h>
+void *__firehose_buffer_create(size_t *size) { (void)size; return NULL; }
+void *__firehose_buffer_tracepoint_reserve(void) { return NULL; }
+void __firehose_buffer_tracepoint_flush(void) { }
+void __firehose_merge_updates(void) { }
+_Bool __firehose_kernel_configuration_valid(void) { return 1; }
+C
+  mkdir -p "$FAKEROOT/usr/local/lib/kernel"
+  xcrun --sdk "$SDK" clang -arch arm64 -mkernel -O2 -c "$WORK/firehose_stub.c" -o "$WORK/firehose_stub.o" &&
+    xcrun libtool -static -o "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" "$WORK/firehose_stub.o" &&
+    echo "stub library: $FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a"
+fi
 
 stage "xnu kernel: $KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG"
 cd "$WORK/xnu"
