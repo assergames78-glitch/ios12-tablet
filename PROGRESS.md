@@ -55,6 +55,16 @@ built it for *new* iPhone chips, using about 3,900 instructions that older chips
 (like the tablet's and the Raspberry Pi's) don't have. Attempt 10 builds it for
 the iPhone 5s's chip instead, which speaks the same language as the tablet's.
 
+**Evening: tries got fast.** Each try used to take 25 minutes. Two slow parts
+turned out to be unnecessary for testing; without them, a full build takes
+about 4 minutes and later tries reuse earlier work.
+
+**Evening: ✅ STEP: the core of iOS 12 boots (try 12).** In the pretend
+Raspberry Pi it printed `Darwin Kernel Version 18.7.0`, found ~870 MB of
+memory, and started its scheduler and messaging systems. Then it stopped on
+purpose: *"Unable to find driver for this platform"*. Real iPhones ship a
+closed-source driver for each model; we wrote our own small one (try 13).
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.
