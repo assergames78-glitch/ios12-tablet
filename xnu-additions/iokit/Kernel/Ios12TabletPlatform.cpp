@@ -20,6 +20,9 @@ extern "C" void ios12_dump_threads(void);
 /* osfmk/arm64/machine_routines.c: normally called by the platform kext when it
  * registers CPUs; ml_get_max_cpus() (commpage setup) blocks until it is. */
 extern "C" void ml_init_max_cpus(unsigned int max_cpus);
+/* libpthread kern/kern_init.c (pthread.kext, built into this kernel): its
+ * kext start routine registers the pthread function table with BSD. */
+extern "C" int pthread_start(void *kmod_info, void *data);
 
 /*
  * Boot diagnostics: a thread that prints a heartbeat every 2 seconds. If the
@@ -86,6 +89,9 @@ Ios12TabletPlatform::start(IOService * provider)
 	}
 	ml_init_max_cpus(ncpus);
 	IOLog("ios12-tablet: max CPUs set to %u\n", ncpus);
+
+	pthread_start(NULL, NULL);
+	IOLog("ios12-tablet: built-in pthread support registered\n");
 
 	if (!super::start(provider)) {
 		IOLog("ios12-tablet: IODTPlatformExpert::start failed\n");

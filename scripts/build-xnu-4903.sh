@@ -52,6 +52,7 @@ clone xnu "$XNU_TAG" "$WORK/xnu-pristine"
 clone dtrace "" "$WORK/dtrace"
 clone AvailabilityVersions "" "$WORK/AvailabilityVersions"
 clone libdispatch "$LIBDISPATCH_TAG" "$WORK/libdispatch" || clone libdispatch "" "$WORK/libdispatch"
+clone libpthread "${LIBPTHREAD_TAG:-libpthread-330.250.2}" "$WORK/libpthread"
 ( cd "$WORK/xnu-pristine" && git log -1 --oneline )
 
 stage "dtrace ctf tools"
@@ -135,6 +136,23 @@ grep -q 'ios12_prng.c' osfmk/conf/files ||
   printf '\nosfmk/prng/ios12_prng.c\t\tstandard\n' >> osfmk/conf/files
 grep -q 'ios12_debug.c' osfmk/conf/files ||
   printf 'osfmk/kern/ios12_debug.c\t\tstandard\n' >> osfmk/conf/files
+#    - pthread.kext (libpthread's kern/) built into the kernel: bsd_init
+#      panics "pthread kernel extension not loaded" without it, and we can't
+#      load kexts. Compiled in osfmk (it was built with MACH_KERNEL_PRIVATE)
+#      using the kext's own extra defines; registered by Ios12TabletPlatform.
+mkdir -p libpthread_kext
+cp -R "$WORK/libpthread/kern" "$WORK/libpthread/pthread" "$WORK/libpthread/private" libpthread_kext/
+for f in kern_init kern_support kern_synch; do
+  mv "libpthread_kext/kern/$f.c" "libpthread_kext/kern/pthread_$f.c"
+  grep -q "pthread_$f.c" osfmk/conf/files ||
+    printf 'libpthread_kext/kern/pthread_%s.c\t\tstandard\n' "$f" >> osfmk/conf/files
+done
+if ! grep -q 'PTHREAD_KEXT_FLAGS' osfmk/conf/Makefile.template; then
+  perl -0pi -e 's/\n%OBJS\n/\n# ios12-tablet: pthread.kext built in\nPTHREAD_KEXT_FLAGS = -DXNU_KERNEL_PRIVATE -DABSOLUTETIME_SCALAR_TYPE -DNEEDS_SCHED_CALL_T -D__PTHREAD_EXPOSE_INTERNALS__ -Wno-error\nPTHREAD_KEXT_INC = -I\$(SRCROOT)\/libpthread_kext -I\$(SRCROOT)\/libpthread_kext\/private -I\$(SRCROOT)\/bsd\npthread_kern_init.o_CFLAGS_ADD += \$(PTHREAD_KEXT_FLAGS)\npthread_kern_support.o_CFLAGS_ADD += \$(PTHREAD_KEXT_FLAGS)\npthread_kern_synch.o_CFLAGS_ADD += \$(PTHREAD_KEXT_FLAGS)\npthread_kern_init.o_INCFLAGS += \$(PTHREAD_KEXT_INC)\npthread_kern_support.o_INCFLAGS += \$(PTHREAD_KEXT_INC)\npthread_kern_synch.o_INCFLAGS += \$(PTHREAD_KEXT_INC)\n\n%OBJS\n/' \
+    osfmk/conf/Makefile.template
+fi
+grep -n -A9 'pthread.kext built in' osfmk/conf/Makefile.template
+tail -4 osfmk/conf/files
 perl -0pi -e 's/(\x27IOProbeScore\x27    = 0:32;"\n\s*"   \}")/$1\n    "   ,{"\n    "     \x27IOClass\x27         = Ios12TabletPlatform;"\n    "     \x27IOProviderClass\x27 = IOPlatformExpertDevice;"\n    "     \x27IONameMatch\x27     = (\x27Pi3,1\x27, \x27MT6737T,1\x27);"\n    "     \x27IOProbeScore\x27    = 10000:32;"\n    "   }"/' \
   iokit/KernelConfigTables.cpp
 grep -n -A14 'gIOKernelConfigTables =' iokit/KernelConfigTables.cpp
