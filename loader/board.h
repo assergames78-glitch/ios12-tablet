@@ -31,7 +31,8 @@ static inline void board_video(uint64_t *base, uint64_t *row, uint64_t *w, uint6
 #define BOARD_NAME      "MT6737T tablet"
 #define BOARD_PHYS_BASE 0x50000000ULL
 #define BOARD_MEM_SIZE  (0x99000000ULL - BOARD_PHYS_BASE)
-#define BOARD_BOOT_ARGS "serial=0 debug=0x8 -v cpus=1"
+/* No -v: keep the boot logo on screen, like a normal iPhone boot. */
+#define BOARD_BOOT_ARGS "serial=0 debug=0x8 cpus=1"
 
 #define FB_BASE   0x9f210000ULL
 #define FB_W      800

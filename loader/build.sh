@@ -25,8 +25,13 @@ CFLAGS=(-O2 -ffreestanding -nostdlib -fno-builtin -fno-pic -fno-stack-protector
 "${CROSS}gcc" "${CFLAGS[@]}" -c "$HERE/entry.S" -o "$OUT/entry.o"
 "${CROSS}gcc" "${CFLAGS[@]}" -c "$HERE/main.c"  -o "$OUT/main.o"
 "${CROSS}gcc" "${CFLAGS[@]}" -c "$HERE/fbcon.c" -o "$OUT/fbcon.o"
+LOGO_DEF=()
+if [ -n "${LOGO:-}" ] && [ -f "$LOGO" ]; then
+  LOGO_DEF=(-DLOGO_PATH="\"$(realpath "$LOGO")\"")
+  echo "boot logo: $LOGO"
+fi
 "${CROSS}gcc" "${CFLAGS[@]}" -DKERNEL_PATH="\"$KERNEL\"" -DADT_PATH="\"$OUT/adt.bin\"" \
-  -c "$HERE/payload.S" -o "$OUT/payload.o"
+  "${LOGO_DEF[@]}" -c "$HERE/payload.S" -o "$OUT/payload.o"
 "${CROSS}ld" -nostdlib --defsym LOAD_ADDR=$LOAD -T "$HERE/link.ld" \
   "$OUT/entry.o" "$OUT/main.o" "$OUT/fbcon.o" "$OUT/payload.o" -o "$OUT/loader.elf"
 "${CROSS}objcopy" -O binary "$OUT/loader.elf" "$OUT/loader.bin"

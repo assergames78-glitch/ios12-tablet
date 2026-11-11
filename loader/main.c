@@ -12,6 +12,8 @@
 #include "board.h"
 
 extern char kernel_start[], kernel_end[], adt_start[], adt_end[];
+extern char logo_start[], logo_end[];
+void board_draw_logo(const uint8_t *logo, size_t len);
 extern void jump_to_kernel(uint64_t entry_phys, uint64_t boot_args_phys);
 
 /* ---- tiny libc ---- */
@@ -153,6 +155,9 @@ void loader_main(uint64_t dtb)
 	kv("topOfKernelData", top);
 	puts_("boot-args: "); puts_(cmd); puts_("\n");
 	puts_("jumping to xnu...\n\n");
+
+	/* Like iBoot: put up the boot logo, then start the kernel behind it. */
+	board_draw_logo((const uint8_t *)logo_start, (size_t)(logo_end - logo_start));
 
 	jump_to_kernel(V2P(pc), (uint64_t)ba);
 }

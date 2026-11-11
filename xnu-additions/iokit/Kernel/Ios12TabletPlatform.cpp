@@ -17,6 +17,9 @@
 extern "C" void ios12_prng_register(void);
 /* osfmk/kern/ios12_debug.c: prints all threads and where they block. */
 extern "C" void ios12_dump_threads(void);
+/* osfmk/arm64/machine_routines.c: normally called by the platform kext when it
+ * registers CPUs; ml_get_max_cpus() (commpage setup) blocks until it is. */
+extern "C" void ml_init_max_cpus(unsigned int max_cpus);
 
 /*
  * Boot diagnostics: a thread that prints a heartbeat every 2 seconds. If the
@@ -74,6 +77,15 @@ Ios12TabletPlatform::start(IOService * provider)
 	 * needs read_random(), which needs a registered PRNG backend. */
 	ios12_prng_register();
 	IOLog("ios12-tablet: kernel random number generator registered\n");
+
+	/* Tell the kernel how many CPUs it will get (we boot with cpus=1). */
+	uint32_t ncpus = 1;
+	PE_parse_boot_argn("cpus", &ncpus, sizeof(ncpus));
+	if (ncpus == 0) {
+		ncpus = 1;
+	}
+	ml_init_max_cpus(ncpus);
+	IOLog("ios12-tablet: max CPUs set to %u\n", ncpus);
 
 	if (!super::start(provider)) {
 		IOLog("ios12-tablet: IODTPlatformExpert::start failed\n");
