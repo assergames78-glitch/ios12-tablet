@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Host tools (dtrace CTF tools, AvailabilityVersions) don't change between
+      # runs; restore them so each build goes straight to the kernel.
+      - name: Cache host tools
+        uses: actions/cache@v4
+        with:
+          path: work/fakeroot/usr/local
+          key: hosttools-${{ inputs.runner }}-${{ hashFiles('scripts/build-xnu-4903.sh') }}
+          restore-keys: hosttools-${{ inputs.runner }}-
+
       - name: Build
         env:
           XNU_TAG: ${{ inputs.xnu_tag }}

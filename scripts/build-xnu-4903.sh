@@ -52,6 +52,7 @@ clone libdispatch "$LIBDISPATCH_TAG" "$WORK/libdispatch" || clone libdispatch ""
 ( cd "$WORK/xnu" && git log -1 --oneline )
 
 stage "dtrace ctf tools"
+[ -n "$(find "$FAKEROOT" -name ctfmerge -type f 2>/dev/null | head -1)" ] && echo "cached" || \
 ( cd "$WORK/dtrace" && run dtrace xcodebuild install -sdk macosx \
     -target ctfconvert -target ctfdump -target ctfmerge \
     ARCHS="$(uname -m)" CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO \
@@ -61,6 +62,7 @@ CTF_BIN="$(dirname "$(find "$FAKEROOT" -name ctfmerge -type f | head -1)")"
 echo "ctf tools in: ${CTF_BIN:-NOT BUILT}"
 
 stage "AvailabilityVersions"
+[ -n "$(find "$FAKEROOT" -name availability.pl 2>/dev/null | head -1)" ] && echo "cached" || \
 ( cd "$WORK/AvailabilityVersions" && run availability make install \
     OBJROOT="$WORK/build/av.obj/" SYMROOT="$WORK/build/av.sym/" DSTROOT="$FAKEROOT" )
 AVAIL_PL="$(find "$FAKEROOT" -name availability.pl | head -1)"
@@ -144,7 +146,8 @@ CTF_ARGS=()
 if [ -n "${CTF_BIN:-}" ] && [ "$CTF_BIN" != "." ]; then
   CTF_ARGS=(CTFCONVERT="$CTF_BIN/ctfconvert" CTFMERGE="$CTF_BIN/ctfmerge" CTFINSERT="$CTF_BIN/ctfinsert")
 fi
-run xnu make -j"$(sysctl -n hw.ncpu)" install VERBOSE=YES \
+# -k: keep going past failures so one run reports every broken file at once.
+run xnu make -k -j"$(sysctl -n hw.ncpu)" install VERBOSE=YES \
   "${COMMON_MAKE_ARGS[@]}" \
   KERNEL_CONFIGS="$KERNEL_CONFIG" ARCH_CONFIGS="$ARCH_CONFIG" MACHINE_CONFIGS="$MACHINE_CONFIG" \
   "${CTF_ARGS[@]}" \
@@ -153,7 +156,11 @@ XNU_RC=$?
 
 stage "result"
 echo "make exit code: $XNU_RC"
-echo "first errors:"; grep -n -m 40 -E 'error:|Error [0-9]|No rule to make|not found' "$LOGS/xnu.log" || true
+grep -h -E '^[^ ]+:[0-9]+:[0-9]+: (fatal )?error:' "$LOGS"/*.log | sort -u > "$LOGS/all-errors.txt" || true
+echo "distinct compiler errors: $(wc -l < "$LOGS/all-errors.txt")"
+echo "files with errors:"; cut -d: -f1 "$LOGS/all-errors.txt" | sort | uniq -c | sort -rn | head -40
+echo "error kinds:"; sed -E 's/.*error: //' "$LOGS/all-errors.txt" | sed -E "s/'[^']*'/'X'/g" | sort | uniq -c | sort -rn | head -25
+echo "other failures:"; grep -h -E 'No rule to make|bad interpreter|command not found|\*\*\* \[' "$LOGS"/*.log | grep -v 'Waiting for' | sort -u | head -40 || true
 mkdir -p "$ROOT/out"
 find "$WORK/build/xnu.obj" -maxdepth 2 -name 'kernel*' -type f -exec cp {} "$ROOT/out/" \; 2>/dev/null
 ls -la "$ROOT/out"
