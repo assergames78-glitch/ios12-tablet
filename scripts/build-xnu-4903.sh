@@ -125,6 +125,15 @@ grep -n -A2 'ARM_BOARD_CLASS_BCM2837' pexpert/pexpert/arm64/board_config.h
 perl -pi -e 's/^(\s*)tclk = 1000000;/$1tclk = (uint32_t)__builtin_arm_rsr64("CNTFRQ_EL0"); \/* ios12-tablet *\/\n$1if (tclk == 0) { tclk = 1000000; }/' \
   pexpert/arm/pe_identify_machine.c
 grep -n -A1 'ios12-tablet' pexpert/arm/pe_identify_machine.c
+#    - Our own source files (xnu-additions/) are copied into the tree.
+#      Ios12TabletPlatform: IOKit platform driver for "Pi3,1" / "MT6737T,1",
+#      so IOKit doesn't fall back to IOPanicPlatform.
+cp -R "$ROOT/xnu-additions/." .
+grep -q 'Ios12TabletPlatform.cpp' iokit/conf/files ||
+  printf '\niokit/Kernel/Ios12TabletPlatform.cpp\t\t\toptional iokitcpp\n' >> iokit/conf/files
+perl -0pi -e 's/(\x27IOProbeScore\x27    = 0:32;"\n\s*"   \}")/$1\n    "   ,{"\n    "     \x27IOClass\x27         = Ios12TabletPlatform;"\n    "     \x27IOProviderClass\x27 = IOPlatformExpertDevice;"\n    "     \x27IONameMatch\x27     = (\x27Pi3,1\x27, \x27MT6737T,1\x27);"\n    "     \x27IOProbeScore\x27    = 10000:32;"\n    "   }"/' \
+  iokit/KernelConfigTables.cpp
+grep -n -A14 'gIOKernelConfigTables =' iokit/KernelConfigTables.cpp
 #    - IOKit and workqueues use blocks, but the BCM2837 config (unlike
 #      MASTER.arm64) never enables the kernel's blocks runtime.
 perl -pi -e 's/^(#  LIBKERN_BASE =\s+\[ libkerncpp) (?!config_blocks)/$1 config_blocks /' config/MASTER.arm64.bcm2837
@@ -307,4 +316,10 @@ find -L "$WORK/build/xnu.obj" "$WORK/build/xnu.dst" -maxdepth 4 -type f \
   -exec cp {} "$ROOT/out/" \; 2>/dev/null
 [ -d "$WORK/build/xnu.sym" ] && find "$WORK/build/xnu.sym" -maxdepth 1 -name 'kernel*' -type f -exec cp {} "$ROOT/out/" \; 2>/dev/null
 ls -la "$ROOT/out"
+# The unstripped kernel is what we boot. The later strip/dSYM step needs an
+# Apple tool we don't have (make error 127), so don't fail the try for it.
+if ls "$ROOT/out"/mach.*.unstripped >/dev/null 2>&1 && [ ! -s "$LOGS/all-errors.txt" ]; then
+  echo "KERNEL BUILT OK (ignoring make exit $XNU_RC from the optional strip step)"
+  exit 0
+fi
 exit $XNU_RC
