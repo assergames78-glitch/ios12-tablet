@@ -11,7 +11,7 @@
 #include <kern/queue.h>
 #include <kern/locks.h>
 #include <kern/misc_protos.h>
-#include <kern/thread_kernel_state.h>
+/* struct thread_kernel_state comes in via kern/thread.h -> machine/thread.h */
 
 extern queue_head_t threads;
 extern lck_mtx_t tasks_threads_lock;

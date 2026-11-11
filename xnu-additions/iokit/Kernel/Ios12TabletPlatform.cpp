@@ -13,6 +13,11 @@
 #include <pexpert/pexpert.h>
 #include <mach/mach_time.h>
 
+/* osfmk/prng/ios12_prng.c: stands in for the corecrypto kext's PRNG. */
+extern "C" void ios12_prng_register(void);
+/* osfmk/kern/ios12_debug.c: prints all threads and where they block. */
+extern "C" void ios12_dump_threads(void);
+
 /*
  * Boot diagnostics: a thread that prints a heartbeat every 2 seconds. If the
  * heartbeats stop (or never start), the kernel's timer isn't firing; if they
@@ -32,11 +37,6 @@ ios12_heartbeat(void *arg __unused)
 		}
 	}
 }
-
-/* osfmk/prng/ios12_prng.c: stands in for the corecrypto kext's PRNG. */
-extern "C" void ios12_prng_register(void);
-/* osfmk/kern/ios12_debug.c: prints all threads and where they block. */
-extern "C" void ios12_dump_threads(void);
 
 class Ios12TabletPlatform : public IODTPlatformExpert
 {
