@@ -187,8 +187,23 @@ for d in "$FAKEROOT/usr/local/include/kernel/os" "$FAKEROOT/usr/local/include/os
 done
 ls "$FAKEROOT/usr/local/include/kernel/os" | head
 
+if [ "${REAL_FIREHOSE:-0}" != 1 ] && [ ! -f "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" ]; then
+  # Default: skip the ~6 minute installhdrs + libdispatch build and use the
+  # do-nothing firehose library (os_log persistence only; console unaffected).
+  # Set REAL_FIREHOSE=1 to attempt the real one.
+  stage "libfirehose_kernel: stub (REAL_FIREHOSE=1 to build the real one)"
+  printf '%s\n' '#include <stddef.h>' \
+    'void *__firehose_buffer_create(size_t *size) { (void)size; return NULL; }' \
+    'void *__firehose_buffer_tracepoint_reserve(void) { return NULL; }' \
+    'void __firehose_buffer_tracepoint_flush(void) { }' \
+    'void __firehose_merge_updates(void) { }' \
+    '_Bool __firehose_kernel_configuration_valid(void) { return 1; }' > "$WORK/firehose_stub.c"
+  mkdir -p "$FAKEROOT/usr/local/lib/kernel"
+  xcrun --sdk "$SDK" clang -arch arm64 -mkernel -mcpu=apple-a7 -O2 -c "$WORK/firehose_stub.c" -o "$WORK/firehose_stub.o" &&
+    xcrun libtool -static -o "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" "$WORK/firehose_stub.o"
+fi
 if [ -f "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" ]; then
-  stage "headers + libfirehose_kernel: cached"
+  stage "headers + libfirehose_kernel: ready"
 else
 stage "xnu kernel headers into fakeroot"
 ( cd "$WORK/xnu" && run xnu-headers make -k installhdrs "${COMMON_MAKE_ARGS[@]}" \
