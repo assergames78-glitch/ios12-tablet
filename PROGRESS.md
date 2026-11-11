@@ -41,6 +41,11 @@ do-nothing stand-in is used so the core can finish building anyway. (The core
 copes fine without it: it just skips saving some log messages. Its on-screen
 startup text doesn't depend on it.)
 
+**Evening: attempt 8.** The safety net kicked in and the core got to the very
+last step, missing only 6 names from a small Apple feature called "blocks".
+Apple's Raspberry Pi settings (our starting point) simply forgot to switch that
+feature on, unlike the iPhone settings. Attempt 9 switches it on.
+
 ### What's next
 
 1. Attempt 7 finishes → a real iOS 12 core file.
