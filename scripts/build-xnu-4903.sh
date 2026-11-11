@@ -158,6 +158,19 @@ stage "xnu kernel headers into fakeroot"
     SRCROOT="$WORK/xnu" OBJROOT="$WORK/build/hdrs.obj" SYMROOT="$WORK/build/hdrs.sym" DSTROOT="$FAKEROOT" )
 
 stage "libfirehose_kernel ($LIBDISPATCH_TAG)"
+# xnu's installed kernel headers include <Availability.h> and friends, which a
+# real SDK's Kernel.framework provides but installhdrs does not. Borrow them
+# from the iOS SDK.
+SDK_PATH="$(xcrun --sdk "$SDK" --show-sdk-path)"
+for d in Headers PrivateHeaders; do
+  KF="$FAKEROOT/System/Library/Frameworks/Kernel.framework/$d"
+  [ -d "$KF" ] || continue
+  for h in Availability.h AvailabilityInternal.h AvailabilityInternalLegacy.h \
+           AvailabilityMacros.h AvailabilityVersions.h TargetConditionals.h; do
+    [ -f "$SDK_PATH/usr/include/$h" ] && [ ! -f "$KF/$h" ] && cp "$SDK_PATH/usr/include/$h" "$KF/$h"
+  done
+  echo "Availability headers in $KF: $(ls "$KF" | grep -c -E '^(Availability|TargetConditionals)')"
+done
 # Drop includes of Apple-internal xcconfigs that only exist inside Apple.
 for f in "$WORK"/libdispatch/xcodeconfig/*.xcconfig; do
   sed -i '' -E '/#include.*(BSD\.xcconfig|AppleInternal)/d' "$f"
