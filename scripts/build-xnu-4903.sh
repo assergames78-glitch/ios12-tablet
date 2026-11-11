@@ -114,6 +114,10 @@ fi
 perl -pi -e 's/^(#define ARM_BOARD_CLASS_BCM2837)\s*$/$1\n#define CORE_NCTRS 8 \/* ios12-tablet *\/\n/' \
   pexpert/pexpert/arm64/board_config.h
 grep -n -A2 'ARM_BOARD_CLASS_BCM2837' pexpert/pexpert/arm64/board_config.h
+#    - IOKit and workqueues use blocks, but the BCM2837 config (unlike
+#      MASTER.arm64) never enables the kernel's blocks runtime.
+perl -pi -e 's/^(#  LIBKERN_BASE =\s+\[ libkerncpp) (?!config_blocks)/$1 config_blocks /' config/MASTER.arm64.bcm2837
+grep -n 'LIBKERN_BASE =' config/MASTER.arm64.bcm2837
 #    - assym.s: replace the sed that modern clang output breaks (see script).
 cp "$ROOT/scripts/genassym_to_assym.py" tools/genassym_to_assym.py
 perl -0pi -e 's/(assym\.s: genassym\.o\n)\t\$\(_v\)sed [^\n]*\n/$1\t\$(_v)python3 \$(SRCROOT)\/tools\/genassym_to_assym.py genassym.o > \$@\n/' \
